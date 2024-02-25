@@ -1,0 +1,14 @@
+version: '3.8' # 사용하는 Docker Compose 파일 버전
+
+services:
+  redis:
+    image: redis:7.0.8 # 사용할 Redis 이미지와 태그
+    container_name: my_redis_container # 생성할 컨테이너의 이름
+    ports:
+      - "6379:6379" # 호스트와 컨테이너 간에 포트 매핑
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf # 데이터 지속성을 위한 볼륨 마운트
+    command: redis-server --appendonly yes # AOF(Append Only File) 모드 활성화
+
+volumes:
+  redis_data: # Redis 데이터를 저장할 볼륨 정의

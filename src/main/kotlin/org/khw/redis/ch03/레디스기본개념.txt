@@ -1,0 +1,166 @@
+* 레디스의 자료구조
+    * string
+        string은 레디스에서 데이터를 저장할 수 있는 가장 간단한 자료 구조이다 string에는
+        최대 512mb의 문자열 데이터를 저장할 수 있으며 이진 데이터를 포함하는 모든 종류의 문자열이 binary-safe하게
+        처리되기 때문에 JPEG 이미지와 같은 바이트 값, HTTP 응답값 등의 다양한 데이터를 저장하는 것도 가능
+
+        string은 키와 실제 저장되는 아이템이 일대일로 연결되는 유일한 자료구조
+
+        > SET hello world // hello라는 키에 world라는 벨류 저장
+        > GET hello // "world"
+
+        SET과 함께 NX 옵션을 사용하면 지정한 키가 없을 때에만 새로운 키를 저장
+        > SET hello newval NX
+        (nil)
+
+        XX 옵션을 사용하면 키가 있을 때에만 새로운 값으로 덮어 쓰며 새로운 키를 생성하진 않도록 동작
+        > SET hello newval XX
+        OK
+
+        > GET hello
+        "newval"
+
+        -INCR, INCRBY와 같은 커맨드를 이용하면 string 자료구조에 저장된 숫자를 원자적으로 조작할 수 있다
+        > SET counter 100
+        OK
+
+        > INCR counter
+        (integer) 101
+
+        > INCR counter
+        (integer) 102
+
+        > INCR counter  50
+        (integer) 152
+
+        -DECR, DECRBY 커맨드는 동일한 방식으로 데이터를 감소시키는 커맨드이다
+
+        커맨드가 원자적이라는 것은 같은 키에 접근하는 여러 클라이언트가 경쟁 상태를 발생시킬 일이 없음을 의미한다.
+        커맨드를 수행하는 타이밍이나 순서에 따라 이미 실행한 커맨드가 무시되거나 같은 커맨드가 중복 처리돼 수행 겨로가가 달라지는
+        일은 발생하지 않음을 뜻한다
+            ex) 클라이언트 A와 B가 동시에 10이라는 데이터를 가지고 있는 키에 INCR 커맨드를 수행하더라도 하나의 커맨드만 수행돼 11이 저장되는 상황은
+            발생하지 않는다
+
+        MSET, MGET 커맨드를 이용하면 한 번에 여러 키를 조작할 수 있다
+        > MSET a 10 b 20 c 30
+        OK
+
+        > MGET a b c
+        1) "10"
+        2) "20"
+        3) "30"
+
+        list는 순서를 가지는 문자열의 목록이다 하나의 list에는 최대 42억여 개의 아이템을 저장할 수 있다
+        일반적으로 알고 있는 다른 배열처럼 인덱스를 이용해 데이터에 직접 접근할 수도 있으며 일반적으로 list는 서비스에서 스택과 큐로서 사용된다
+
+        LPUSH 커맨드는 list 왼쪽에 데이터를 추가하며, RPUSH 커맨드는 list의 오른쪽에 데이터를 추가한다
+        LRANGE 커맨드를 이용하면 list에 들어있는 데이터를 조회할 수 있다
+
+        > LPUSH mylist E
+        (integer) 1
+
+        > LPUSH mylist B
+        (integer) 2
+
+        > LPUSH mylist D A C B A
+        (integer) 7
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "B"
+        3) "C"
+        4) "A"
+        5) "D"
+        6) "E"
+        7) "B"
+
+        > LRANGE mylist 0 3
+        1) "A"
+        2) "B"
+        3) "C"
+        4) "A"
+
+        LPOP 커맨드를 사용하면 list에 저장된 첫 번째 아이템을 반환하는 동시에 list에서 삭제한다
+        > LPOP mylist
+        "A"
+
+        > LPOP mylist 2
+        1) "B"
+        2) "C"
+
+        LTRIM 커맨드는 시작과 끝 아이템의 인덱스를 인자로 전달받아 지정한 범위에 속하지 않은 아이템은 모두 삭제하지만
+        LPOP과 같이 삭제되는 아이템을 반환하지는 않는다
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "D"
+        3) "E"
+        4) "B"
+
+        > LTRIM mylist 0 1
+        OK
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "D"
+
+        ** list의 양 끝에 데이터를 넣고 빼는 LPUSH, RPUSH, LPOP, RPOP 커맨드는 O(1)
+        list의 중간 데이터에 접근할 때에는 O(n)으로 처리되며, list에 저장된 데이터가 늘어남에 따라 성능은 저하된
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "B"
+        3) "C"
+        4) "A"
+        5) "D"
+        6) "B"
+        7) "E"
+
+        > LINSERT mylist BEFORE B E // B 앞에 E를 추가
+        (integer) 8
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "E"
+        3) "B"
+        4) "C"
+        5) "A"
+        6) "D"
+        7) "B"
+        8) "E"
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "E"
+        3) "B"
+        4) "C"
+        5) "A"
+        6) "D"
+        7) "B"
+        8) "E"
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "E"
+        3) "B"
+        4) "C"
+        5) "A"
+        6) "D"
+        7) "B"
+        8) "E"
+
+        > LSET mylist 2 F // 인덱스 2에 F라는 데이터를 저장
+        OK
+
+        > LRANGE mylist 0 -1
+        1) "A"
+        2) "E"
+        3) "F"
+        4) "C"
+        5) "A"
+        6) "D"
+        7) "B"
+        8) "E"
+
+        > LINDEX mylist 3 // 특정 인덱스의 데이터 조회
+        "C"

@@ -1,0 +1,182 @@
+
+* sorted-set을 이용한 리더보드
+    - 일별 리더보드를 도입하기 위해 daily-score:<날짜>를 이용해 sorted set 키를 만들고, 사용자의 스코어를 가중치로 사용해서 데이터를 입력
+
+    ZADD daily-score:220817 28 player:286
+    (integer) 1
+    > ZADD daily-score:220817 400 player:234
+    (integer) 1
+    > ZADD daily-score:220817 45 player:101
+    (integer) 1
+    > ZADD daily-score:220817 357 player:24
+    (integer) 1
+    > ZADD daily-score:220817 199 player:143
+    (integer) 1
+
+    sorted-set은 순서없이 데이터를 저장하더라도 sorted set에는 데이터가 스코어 순으로 정렬돼 저장된다.
+    ZRANGE 커맨드를 이용하면 스코어로 오름차순 정렬된 데이터를 확인할 수 있다.
+
+    > ZRANGE daily-score:220817 0 -1 withscores
+     1) "player:286"
+     2) "28"
+     3) "player:101"
+     4) "45"
+     5) "player:143"
+     6) "199"
+     7) "player:24"
+     8) "357"
+     9) "player:234"
+    10) "400"
+
+    ZRANGE는 스코어가 낮은 순서부터 추력한다. 만약 게임의 첫 화면으로 오늘의 상위 스코어 세 명의 유저만 출력하고 싶다면
+    다음과 같이 ZREVRANGE 커맨드를 사용할 수 있다.
+
+    > ZRANGE daily-score:220817 0 2 withscores
+    1) "player:286"
+    2) "28"
+    3) "player:101"
+    4) "45"
+    5) "player:143"
+    6) "199"
+
+    ZREVRANGE는 sorted set에 저장된 데이터를 내림차순으로 반환하는데, 이때 0번 인덱스인 첫 번째 데이터부터 2번 인덱스인 세 번째 데이터까지
+    출력하라는 커맨드를 사용했기 때문에 스코어가 가장 높은 3개의 데이터가 출력된다.
+
+    - 데이터 업데이트
+        > ZADD daily-score:220817 200 player:286
+        (integer) 0
+        > ZRANGE daily-score:220817 0 -1 withscores
+         1) "player:101"
+         2) "45"
+         3) "player:143"
+         4) "199"
+         5) "player:286"
+         6) "200"
+         7) "player:24"
+         8) "357"
+         9) "player:234"
+        10) "400"
+
+        sorted set은 기본적으로 set이기 때문에 데이터는 중복으로 저장되지 않으며, 같은 아이템을 저장하고자 할 때 스코어가 다르면
+        기존 데이터의 스코어만 신규 입력한 스코어로 업데이트된다.(순서도 재정렬)
+
+    - 스코어 증감
+        ZINCRBY 커맨드는 string에서의 INCRBY 커맨드와 비슷하게 동작하며, 아이템의 스코어를 입력한 만큼 증가시키는 커맨드다.
+
+        > ZINCRBY daily-score:220817 100 player:24
+        "457"
+
+        > ZRANGE daily-score:220817 0 -1 withscores
+         1) "player:101"
+         2) "45"
+         3) "player:143"
+         4) "199"
+         5) "player:286"
+         6) "200"
+         7) "player:234"
+         8) "400"
+         9) "player:24"
+        10) "457"
+
+    - 리더보드 합산
+        ZUNIONSTORE 커맨드는 지정한 키에 연결된 각 아이템의 스코어를 합산하는 커맨드다.
+        따라서 해당하는 일자의 키를 지정하기만 한다면 손쉽게 주간 리더보드 데이터를 얻을 수 있다.
+
+        > ZUNIONSTORE weekly-score:2208-3 3 daily-score:220815 daily-score:220816 daily-score:220817
+        (integer) 5
+        > ZRANGE weekly-score:2208-3 0 -1 withscores
+         1) "player:101"
+         2) "45"
+         3) "player:143"
+         4) "199"
+         5) "player:286"
+         6) "200"
+         7) "player:234"
+         8) "400"
+         9) "player:24"
+        10) "457"
+
+        sorted-set은 스코어가 같으면 사전순으로 정렬!!
+
+    - 가중치 적용
+
+    > ZUNIONSTORE weekly-score:2208-3 3 daily-score:220815 daily-score:220816 daily-score:220817 weights 1 1 2
+    (integer) 5
+    > ZRANGE weekly-score:2208-3 0 -1 withscores
+     1) "player:101"
+     2) "90"
+     3) "player:143"
+     4) "398"
+     5) "player:286"
+     6) "400"
+     7) "player:234"
+     8) "800"
+     9) "player:24"
+    10) "914"
+
+
+* sorted set을 이용한 최근 검색 기록
+    - 요구사항
+        ㄴ 유저별로 다른 키워드 노출
+        ㄴ 검색 내역은 중복 제거
+        ㄴ 가장 최근 검색한 5개의 키워드만 사용자에게 노출
+
+    sorted set은 set이기 때문에 저장될 때부터 중복을 허용하지 않으며, 스코어로 시간을 사용한다면 검색 기록으로 정렬될 수 있다.
+
+    > ZADD search-keyword:123 20221106143501 듀로이코
+    (integer) 1
+
+    > ZADD search-keyword:123 20221106143533 sorted
+    (integer) 1
+    > ZRANGE search-keyword:123 0 -1 withscores
+    1) "\xeb\x93\x80\xeb\xa1\x9c\xec\x9d\xb4\xec\xbd\x94"
+    2) "20221106143501"
+    3) "sorted"
+    4) "20221106143533"
+
+    Sorted set을 이용해 데이터를 저장하기 때문에 같은 키워드를 다시 검색했을 때에도 별다른 중복 체크를 진행하지 않아도 된다.
+    각 아이템은 중복되지 않게 저장되기 때문에 같은 아이템의 데이터를 입력한다면 자동으로 스코어만 업데이트돼 재정렬된다.
+
+    데이터는 시간 순으로 정렬되기 때문에 가장 오래된 데이터를 지우기 위해서는 데이터가 6개째 저장됐을 때 가장 오래된 데이터인 0번
+    인덱스의 데이터를 삭제하면 된다. 하지만 매번 데이터를 저장할 때 아이템의 개수를 확인해야 하는 번거로움이 존재한다.
+
+    이때 sorted set의 음수 인덱스를 사용해서 데이터를 삭제한다면 위와 같은 번거로운 작업을 줄일 수 있다.
+    음수 인덱스는 아이템의 제일 마지막 값ㅇ르 -1로 시작해서 역순으로 증가하는 값이다.
+
+    데이터가 6개 저장됐을 때 가장 오래전 저장된 데이터는 일반 인덱스로 0, 음수 인덱스로 -6이 된다.
+    따라서 -6번 인덱스를 삭제하는 것은 0번 인덱스를 삭제하는 것과 동일한 작업을 하는 것이 된다.
+
+    >ZREMRANGEBYRANK search-keyword:123 -6 -6
+    (integer) 0 // 0은 삭제된 키가 없다는건 1이 있다는것
+
+* set을 이용한 태그 기능
+    // 특정 게시물에 연관된 태그 저장
+    > SADD post:47:tags IT REDIS DataStore
+    (integer) 3
+    > SADD post:22:tags IT python
+    (integer) 2
+    > SADD post:53:tags DataStore IT MySql
+    (integer) 3
+
+    태그 기능을 사용하는 이유 중 하나는 특정 게시물이 어떤 태그와 연관돼 있는지 확인하는 것뿐만 아니라 특정한 태그를 포함한 게시물들만 확인하기 위해서일 수 있다.
+
+    // 특정 태그에 연관된 게시물 번호 저장
+    > SADD tag:DataStore:posts 53
+    (integer) 1
+    > SADD tag:IT:posts 53
+    (integer) 1
+    > SADD tag:MySQL:posts 53
+    (integer) 1
+
+    tag를 기준으로 하는 set의 데이터를 나타낸다. SMEMBERS 커맨드를 이용하면 특정 태그를 갖고 있는 포스트를 쉽게 확인 가능
+    > SMEMBERS tag:IT:posts
+    1) "53"
+    2) "444"
+
+    SINTER 커맨드를 이용하면 특정 set의 교집합을 확인할 수 있다. 만약 IT와 DataStore 태그를 모두 포함하는 게시물을 확인하고 싶으면
+    > SINTER tag:IT:posts tag:DataStore:posts
+    1) "53"
+    2) "444"
+
+
+

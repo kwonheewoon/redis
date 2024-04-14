@@ -41,6 +41,7 @@
         > XADD Eamil * subject "first" body "hello?"
         "1711777290766-0"
 
+        // XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] ID [ID ...]
         > XREAD BLOCK 0 STREAMS Eamil 0
         1) 1) "Eamil"
            2) 1) 1) "1711777290766-0"
@@ -48,3 +49,51 @@
                     2) "first"
                     3) "body"
                     4) "hello?"
+
+        BLOCK 0은 더 이상 stream에서 가져올 데이터가 없더라도 연결을 끊지 말고 계속 stream을 리스닝하라는 의미이다.
+        만약 BLOCK 1000을 입력했다면 들어오는 데이터가 없더라도 1000ms 즉 최대 1초 동안 연결을 유지하며 대기하라는 것을 의미한다.
+
+        STREAMS Email 0 이라는 커맨드는 Email이라는 stream에 저장된 데이터 중 ID가 0보다 큰 값을 읽어오라는 의미이며
+        즉 stream에 처음부터 저장된 모든 데이터를 읽어오라는 것을 의미한다.
+
+        커맨드를 실행한 이후의 메시지만을 가져오고 싶다면 0 대신 특수 ID인 $를 입력하면 된다. 이 특수 ID를 전달하면 커맨드를 실행한 이후의
+        데이터부터 가져온다.
+        즉 $는 stream에 저장된 최대 ID를 의미하는 것이라 생각할 수 있다.
+
+        혹은 다음과 같이 직접 ID 값을 지정해서 데이터를 읽을 수 있다
+        > XREAD BLOCK 0 STREAMS Eamil 0 1659115180983
+
+    ** 특정한 데이터 조회
+        XRANGE key start end [COUNT count]
+        XREVRANGE key start end [COUNT count]
+
+        XRANGE 커맨드를 이용하면 ID를 이용 원하는 시간대의 데이터를 조회할 수 있다.
+        stream에 저장된 ID 중 가장 작은 ID 값을 지정하고 싶을 때에는 -, 제일 마지막 ID 값을 지정하고 싶을 때에는 + 기호를 사용하자.
+        XREVRANGE는 XRANGE의 역순으로 데이터를 조회하고 싶을 때 사용한다.
+
+
+        > XRANGE Eamil - +
+        1) 1) "1711777290766-0"
+           2) 1) "subject"
+              2) "first"
+              3) "body"
+              4) "hello?"
+
+        이 커맨드는 앞서 XREAD BLOCK 0 STREAMS Eamil 0 커맨드를 수행했을 때의 결과와 같다고 생각할 수 있다.
+        하지만 XREAD 사용했을 때에는 기존 데이터를 모두 반환한 뒤, 신규로 들어오는 메시지를 계속해서 반환하지만, XRANGE 커맨드는
+        커맨드를 수행하는 시점에 stream에 저장된 모든 데이터를 반환한 뒤 종료된다는 차이점이 존재한다.
+
+        XRANGE를 이용한다면 메시지가 저장된 시점을 이용해 데이터를 조회할 수도 있다.
+
+        > XRANGE Email 1659114481310 1659114481319
+        1) 1) "1659114481311-0"
+           2) 1) "subject"
+              2) "first"
+              3) "body"
+              4) "hello?"
+
+        타임 스탬프 값에 ( 문자를 포함하면 그 다음 데이터부터 조회한다
+
+        XRANGE Email 1659114481311-0 + // 1659114481311-0 key 부터 ~
+        XRANGE Email ( 1659114481311-0 + // 1659114481311-0 key 다음 부터 ~
+
